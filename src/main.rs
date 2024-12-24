@@ -3,7 +3,7 @@ use macroquad::rand;
 
 const PARTICLE_RADIUS:f32 = 15.0;
 const CONSTRAINT_POSITION:Vec2 = Vec2::new(400.0,300.0);
-const CONSTRAINT_RADIUS:f32 = 100.0;
+const CONSTRAINT_RADIUS:f32 = 300.0;
 const PARTICLES_NUMBER: u32 = 10;//max 1500
 
 
@@ -43,7 +43,7 @@ impl Particle {
     }
     fn apply_constraint(&mut self,) {
         let to_particle = self.current_position-CONSTRAINT_POSITION;
-        let mut dist:f32 = to_particle.length();
+        let dist:f32 = to_particle.length();
 	// Calculate the threshold for the maximum allowed distance
 	
         if dist>(CONSTRAINT_RADIUS-PARTICLE_RADIUS) {
@@ -51,23 +51,16 @@ impl Particle {
             self.current_position = CONSTRAINT_POSITION + -n*(PARTICLE_RADIUS-CONSTRAINT_RADIUS);
 	}
     }
-    fn is_colliding(&self, other: &Particle) -> bool {
-        let dist_sqr: f32 = self.current_position.distance_squared(other.current_position);
-        let radii_sum_sqr: f32 = (PARTICLE_RADIUS*2.0).powf(2.0);
-        dist_sqr < radii_sum_sqr
-    }
-    fn push_apart(&mut self , other: &mut Particle) {
-        let distancevec: Vec2 = self.current_position-other.current_position;
-        let distance: f32 = distancevec.length();
 
-        let overlap: f32 = (PARTICLE_RADIUS*2.0) - distance;
-
-        let pushaway: Vec2 = distancevec / distance * (overlap/2.0);
-        self.current_position -= pushaway;
-        other.current_position += pushaway;
-	self.old_position = other.current_position;
-	other.old_position = self.current_position;
-	
+    fn check_collision(&mut self , other: &mut Particle) {
+	let collision_axis: Vec2 = self.current_position - other.current_position;
+	let dist: f32 =collision_axis.length();
+	if dist < PARTICLE_RADIUS*2.0 {
+	   let  n: Vec2 = collision_axis.normalize();
+	    let delta:f32 = PARTICLE_RADIUS*2.0-dist;
+	    self.current_position += 0.5*delta*n;
+	    other.current_position -= 0.5*delta*n;
+	}
     }
 }
 
@@ -77,12 +70,9 @@ impl World {
         const GRAVITY: Vec2 = Vec2::new(0.0,1000.0);
         for particle in &mut self.particles {
             particle.update(GRAVITY,delta_time);
-        }
-        self.solve_collision();
-        for particle in &mut self.particles {
-            particle.apply_constraint();
-        }
-
+	    particle.apply_constraint();
+	}
+        self.solve_collisions();
     }
     fn fill(&mut self, particlesnumber: usize) {
         while self.particles.len() < particlesnumber {
@@ -96,17 +86,15 @@ impl World {
             draw_circle(particle.current_position.x,particle.current_position.y, PARTICLE_RADIUS, BLUE);
         }
     }
-    fn solve_collision(&mut self) {
+    fn solve_collisions(&mut self) {
         let num_particles: usize = self.particles.len();
 
         for i in 0..num_particles {
             for j in (i+1)..num_particles {
-                if self.particles[i].is_colliding(&self.particles[j]) {
-                    let (p1,p2) = self.particles.split_at_mut(j);
-                    let particle1 = &mut p1[i];
-                    let particle2 = &mut p2[0];
-                    particle1.push_apart(particle2);
-                }
+		let (p1,p2) = self.particles.split_at_mut(j);
+                let particle1 = &mut p1[i];
+                let particle2 = &mut p2[0];
+                particle1.check_collision(particle2);
             }
         }
     }
